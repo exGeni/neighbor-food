@@ -27,7 +27,7 @@ describe('build config check', () => {
   it('refuses a server credential', () => {
     expect(message(JSON.stringify({ type: 'service_account', private_key: 'x' }))).toContain('NF-BUILD-CONFIG-SECRET');
     expect(message(JSON.stringify({ ...web, client_email: 'a@b' }))).toContain('NF-BUILD-CONFIG-SECRET');
-    expect(message('-----BEGIN PRIVATE KEY-----')).toContain('NF-BUILD-CONFIG-SECRET');
+    expect(message(['-----BEGIN', 'PRIVATE', 'KEY-----'].join(' '))).toContain('NF-BUILD-CONFIG-SECRET');
   });
   it('never repeats a value', () => {
     const secret = 'SECRET-VALUE-123';

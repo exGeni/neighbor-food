@@ -114,7 +114,7 @@ export function homeView(options: HomeOptions): () => void {
     h(
       'main',
       { class: 'home' },
-      h('header', { class: 'top' }, h('h1', null, entrance.name), button(t('menu'), menu, { class: 'button button-small', 'data-key': 'menu' })),
+      h('header', { class: 'top' }, h('h1', null, entrance.name), button(t('menu'), menu, { class: 'button button-small', 'data-focus': 'menu' })),
       h(
         'div',
         { class: 'columns' },
@@ -135,7 +135,7 @@ export function homeView(options: HomeOptions): () => void {
   function openRow(id: string): void {
     open.add(id);
     render();
-    const head = list.querySelector<HTMLElement>(`[data-key="head:${CSS.escape(id)}"]`);
+    const head = list.querySelector<HTMLElement>(`[data-focus="head:${CSS.escape(id)}"]`);
     head?.scrollIntoView({ block: 'center', behavior: 'smooth' });
     head?.focus({ preventScroll: true });
   }
@@ -227,7 +227,7 @@ export function homeView(options: HomeOptions): () => void {
       button(label, run, {
         class: `button${primary ? ' button-primary' : ''}`,
         disabled: needsNetwork && off,
-        'data-key': `${id}:${post.id}`,
+        'data-focus': `${id}:${post.id}`,
       });
     const calendarButton = () => control(t('calendar'), () => calendar(post, body), 'calendar', false, false);
     const lines: Child[] = [];
@@ -285,9 +285,9 @@ export function homeView(options: HomeOptions): () => void {
             open.delete(post.id);
             render();
           },
-          { class: 'button button-link', 'data-key': `hide:${post.id}` },
+          { class: 'button button-link', 'data-focus': `hide:${post.id}` },
         ),
-        button(t('contact'), () => contactSheet(entrance.contact), { class: 'button button-link', 'data-key': `contact:${post.id}` }),
+        button(t('contact'), () => contactSheet(entrance.contact), { class: 'button button-link', 'data-focus': `contact:${post.id}` }),
       );
     }
     body.append(...lines.filter((line): line is Node => line instanceof Node), actions);
@@ -321,7 +321,7 @@ export function homeView(options: HomeOptions): () => void {
           type: 'button',
           class: 'row-head',
           'aria-expanded': String(expanded),
-          'data-key': `head:${post.id}`,
+          'data-focus': `head:${post.id}`,
           onclick: () => {
             if (expanded) open.delete(post.id);
             else open.add(post.id);
@@ -356,7 +356,7 @@ export function homeView(options: HomeOptions): () => void {
             null,
             `${t('demoStrip')} `,
             link(t('makeOwn'), '#', {
-              'data-key': 'make-own',
+              'data-focus': 'make-own',
               onclick: (event: Event) => {
                 event.preventDefault();
                 makeOwnSheet();
@@ -369,7 +369,7 @@ export function homeView(options: HomeOptions): () => void {
               stripShown = false;
               render();
             },
-            { class: 'button button-small', 'data-key': 'got-it' },
+            { class: 'button button-small', 'data-focus': 'got-it' },
           ),
         ),
       );
@@ -381,7 +381,7 @@ export function homeView(options: HomeOptions): () => void {
   }
 
   function render(): void {
-    const focused = document.activeElement instanceof HTMLElement ? document.activeElement.dataset.key : undefined;
+    const focused = document.activeElement instanceof HTMLElement ? document.activeElement.dataset.focus : undefined;
     const now = clock();
     const shown = [...posts, ...[...deleting.values()].filter((gone) => !posts.some((post) => post.id === gone.id))];
     const groups = group(shown, me, session.hidden(), now);
@@ -403,7 +403,7 @@ export function homeView(options: HomeOptions): () => void {
             session.setHidden(new Set());
             render();
           },
-          { class: 'button button-link', 'data-key': 'show-hidden' },
+          { class: 'button button-link', 'data-focus': 'show-hidden' },
         ),
       );
     }
@@ -413,7 +413,7 @@ export function homeView(options: HomeOptions): () => void {
     houseBox.classList.toggle('house-loading', !fromServer);
     if (fromServer) house.update(posts, me, now);
     main.disabled = offline() || failure !== null;
-    if (focused) root.querySelector<HTMLElement>(`[data-key="${CSS.escape(focused)}"]`)?.focus({ preventScroll: true });
+    if (focused) root.querySelector<HTMLElement>(`[data-focus="${CSS.escape(focused)}"]`)?.focus({ preventScroll: true });
   }
 
   /** What can only be judged on the server's answer. */

@@ -15,5 +15,5 @@
     "noEmit": true,
     "allowImportingTsExtensions": true
   },
-  "include": ["src", "test", "e2e", "config", "vite.config.ts", "vitest.config.ts", "vitest.rules.config.ts", "playwright.config.ts"]
+  "include": ["src", "test", "config", "vite.config.ts", "vitest.config.ts", "vitest.rules.config.ts", "playwright.config.ts"]
 }

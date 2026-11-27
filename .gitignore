@@ -10,4 +10,5 @@ playwright-report/
 firebase-debug.log
 firestore-debug.log
 ui-debug.log
-.gstack/
+.gstack/*
+!.gstack/pregate.json

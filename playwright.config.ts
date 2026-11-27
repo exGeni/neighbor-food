@@ -4,7 +4,7 @@ import { defineConfig, devices } from '@playwright/test';
 const PORT = 4174;
 
 export default defineConfig({
-  testDir: 'e2e',
+  testDir: 'test/e2e',
   // One emulator database for all tests.
   workers: 1,
   timeout: 60_000,
