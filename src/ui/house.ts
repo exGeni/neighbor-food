@@ -123,7 +123,7 @@ export function createHouse(options: HouseOptions): House {
   const floors = drawnFloors(options.floors);
   const count = floors * WINDOWS_PER_FLOOR;
   const height = ROOF + floors * FLOOR + PORCH;
-  const element = s('svg', { class: 'house', viewBox: `0 0 ${WIDTH} ${height}`, role: options.onSelect ? 'group' : 'img' });
+  const element = s('svg', { class: 'house appear', viewBox: `0 0 ${WIDTH} ${height}`, role: options.onSelect ? 'group' : 'img' });
   element.append(backdrop(height, floors));
 
   const frames = Array.from({ length: count }, (_, slot) => {
@@ -147,7 +147,7 @@ export function createHouse(options: HouseOptions): House {
       ),
     );
     element.append(frame);
-    return { frame, content, id: '', drawn: '' };
+    return { frame, content, id: '', drawn: '', left: 0 };
   });
 
   let seen: Set<string> | null = options.lightFirst ? new Set() : null;
@@ -185,6 +185,9 @@ export function createHouse(options: HouseOptions): House {
         const drawn = post ? `${post.id}:${post.kind}:${state}:${mine}` : '';
         const fresh = !!post && !!seen && !seen.has(post.id);
         const closing = !!post && window.id === post.id && state === 'full' && !window.drawn.endsWith(`:full:${mine}`);
+        // A portion went and some are left.
+        const served = !!post && window.id === post.id && post.left !== undefined && post.left > 0 && post.left < window.left;
+        window.left = post?.left ?? 0;
 
         if (post && options.onSelect) {
           frame.setAttribute('role', 'button');
@@ -198,6 +201,12 @@ export function createHouse(options: HouseOptions): House {
           frame.setAttribute('aria-hidden', 'true');
         }
 
+        if (served) {
+          // Taking the class away and reading the layout lets the same window play it again.
+          frame.classList.remove('served');
+          void frame.getBoundingClientRect();
+          frame.classList.add('served');
+        }
         if (window.drawn === drawn) return;
         frame.dataset.state = state;
         if (post) frame.dataset.kind = post.kind;

@@ -1,6 +1,6 @@
 // Two phones against the local emulators.
 import { expect, test } from '@playwright/test';
-import { createEntrance, enter, OWNER_CODE, openRow, phone, row, setOwnerCode } from './helpers';
+import { admin, createEntrance, enter, exists, OWNER_CODE, openRow, phone, row, setOwnerCode } from './helpers';
 
 test.beforeAll(setOwnerCode);
 
@@ -66,6 +66,7 @@ test('offer and take, then cancel', async ({ browser }) => {
   expect(organiser.seen.problems).toEqual([]);
   expect(guest.seen.problems).toEqual([]);
   expect(strangers([...organiser.seen.requests, ...guest.seen.requests])).toEqual([]);
+  expect([...organiser.seen.console, ...guest.seen.console].join('\n')).not.toContain(key);
   await organiser.context.close();
   await guest.context.close();
 });
@@ -98,6 +99,7 @@ test('ask and reply', async ({ browser }) => {
   expect(organiser.seen.problems).toEqual([]);
   expect(guest.seen.problems).toEqual([]);
   expect(strangers([...organiser.seen.requests, ...guest.seen.requests])).toEqual([]);
+  expect([...organiser.seen.console, ...guest.seen.console].join('\n')).not.toContain(key);
   await organiser.context.close();
   await guest.context.close();
 });
@@ -141,4 +143,93 @@ test('refuses a wrong link and a wrong organiser code', async ({ page }) => {
   await page.getByLabel(/How to reach you/).fill('Ann');
   await page.getByRole('button', { name: 'Create', exact: true }).click();
   await expect(page.locator('[data-code="NF-NEW-REFUSED"]')).toBeVisible();
+});
+
+test('a slow answer keeps the row checking and then confirms', async ({ browser }) => {
+  const organiser = await phone(browser);
+  const guest = await phone(browser);
+  const key = await createEntrance(organiser.page);
+  await organiser.page.goto(`#/e/${key}`);
+  await publish(organiser.page, 'Stew', 2);
+  await enter(guest.page, key);
+  await guest.page.route('**/documents:commit*', async (route) => {
+    await new Promise((resolve) => setTimeout(resolve, 12_000));
+    await route.continue();
+  });
+  await openRow(guest.page, 'Stew');
+  await row(guest.page, 'Stew').getByRole('button', { name: 'Take a portion' }).click();
+  await guest.page.getByRole('button', { name: 'Confirm' }).click();
+  await expect(row(guest.page, 'Stew').getByText('Checking…').first()).toBeVisible();
+  await expect(row(guest.page, 'Stew').getByText('Your portion', { exact: true })).toHaveCount(0);
+  await expect(row(guest.page, 'Stew').getByRole('button', { name: 'Reload to check' })).toBeVisible({ timeout: 15_000 });
+  await expect(row(guest.page, 'Stew').getByText('Your portion', { exact: true })).toBeVisible({ timeout: 15_000 });
+  await organiser.context.close();
+  await guest.context.close();
+});
+
+test('a lost answer about a new entrance leads to its poster, not to a second one', async ({ page }) => {
+  const key = await createEntrance(page);
+  const pending = () => page.evaluate(() => localStorage.getItem('nf:/neighbor-food/:new-entrance'));
+  expect(await pending()).toBeNull();
+  await page.evaluate((value) => localStorage.setItem('nf:/neighbor-food/:new-entrance', value), key);
+  await page.goto('#/new');
+  await expect(page).toHaveURL(new RegExp(`#/e/${key}/poster$`));
+  expect(await pending()).toBeNull();
+});
+
+test('says why when signing in or taking is refused', async ({ browser }) => {
+  const organiser = await phone(browser);
+  const guest = await phone(browser);
+  const key = await createEntrance(organiser.page);
+  await organiser.page.goto(`#/e/${key}`);
+  await publish(organiser.page, 'Cake', 2);
+
+  await guest.page.route('**/accounts:signUp*', (route) => route.abort());
+  await guest.page.goto(`#/e/${key}`);
+  await guest.page.getByRole('button', { name: 'Enter', exact: true }).click();
+  await expect(guest.page.locator('[data-code]')).toBeVisible({ timeout: 20_000 });
+  await expect(guest.page.getByRole('button', { name: 'Enter', exact: true })).toBeEnabled();
+  await guest.page.unroute('**/accounts:signUp*');
+  await guest.page.getByRole('button', { name: 'Enter', exact: true }).click();
+  await openRow(guest.page, 'Cake');
+
+  // The organiser closes the entrance while the neighbour is looking at it.
+  await admin(`entrances/${key}`, { closed: { booleanValue: true } }, true);
+  await row(guest.page, 'Cake').getByRole('button', { name: 'Take a portion' }).click();
+  await guest.page.getByRole('button', { name: 'Confirm' }).click();
+  await expect(guest.page.getByText(/NF-ENTRY-DENIED/).first()).toBeVisible({ timeout: 20_000 });
+  await guest.page.reload();
+  await expect(guest.page.getByText(/This link does not work any more/)).toBeVisible();
+  await organiser.context.close();
+  await guest.context.close();
+});
+
+test('a visit clears out what is over and keeps the rest', async ({ browser }) => {
+  const organiser = await phone(browser);
+  const guest = await phone(browser);
+  const key = await createEntrance(organiser.page);
+  await organiser.page.goto(`#/e/${key}`);
+  await publish(organiser.page, 'Fresh');
+  const text = (value: string) => ({ stringValue: value });
+  const when = (offset: number) => ({ timestampValue: new Date(Date.now() + offset).toISOString() });
+  await admin(`entrances/${key}/posts/old`, {
+    kind: text('ask'),
+    what: text('Yesterday'),
+    where: text(''),
+    name: text(''),
+    allergens: text(''),
+    author: text('someone'),
+    createdAt: when(-48 * 3600_000),
+    expiresAt: when(-3600_000),
+    responses: { mapValue: { fields: {} } },
+  });
+  await enter(guest.page, key);
+  await expect(row(guest.page, 'Fresh')).toBeVisible();
+  await expect(row(guest.page, 'Yesterday')).toHaveCount(0);
+  await expect.poll(() => exists(`entrances/${key}/posts/old`)).toBe(false);
+  // A neighbour's new post is announced.
+  await publish(organiser.page, 'Waffles');
+  await expect(guest.page.getByText('New: Waffles')).toBeVisible();
+  await organiser.context.close();
+  await guest.context.close();
 });

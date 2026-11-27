@@ -41,7 +41,8 @@ function plain(...children: (Node | null)[]): void {
 }
 
 function problem(code: ScreenErrorCode): void {
-  plain(errorBox(code, retryButton(() => void show())));
+  // An unexpected failure may be a file of an older release that is gone: only a reload helps.
+  plain(errorBox(code, retryButton(code === 'NF-UNEXPECTED' ? () => location.reload() : () => void show())));
 }
 
 /** No database in this copy: only the demonstration works. */

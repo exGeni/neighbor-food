@@ -127,7 +127,7 @@ a {
   font-weight: 400;
 }
 .button-small {
-  min-height: 36px;
+  min-height: 44px;
   padding: 0.25rem 0.7rem;
   font-weight: 400;
 }
@@ -473,6 +473,18 @@ input[type='radio'] {
     transform-origin: right;
   }
 
+  .house.appear {
+    animation: appear 500ms ease-out both;
+  }
+  .house .served .pot,
+  .house .served .marker {
+    animation: served 500ms ease-in-out;
+    transform-box: fill-box;
+    transform-origin: center bottom;
+  }
+  .row.highlight {
+    animation: highlight 1.6s ease-out;
+  }
   .row.fresh {
     animation: rise 250ms ease-out both;
   }
@@ -557,6 +569,29 @@ input[type='radio'] {
 @keyframes curtain {
   from {
     transform: scaleX(0.15);
+  }
+}
+@keyframes appear {
+  from {
+    opacity: 0;
+    transform: translateY(14px) scale(0.97);
+  }
+}
+@keyframes served {
+  35% {
+    transform: translateY(-6px) scale(1.15);
+  }
+  70% {
+    transform: scale(0.92);
+  }
+}
+@keyframes highlight {
+  0%,
+  60% {
+    box-shadow: 0 0 0 5px var(--lit);
+  }
+  100% {
+    box-shadow: 0 0 0 0 transparent;
   }
 }
 @keyframes rise {
@@ -650,6 +685,9 @@ input[type='radio'] {
   display: flex;
   flex-direction: column;
   gap: 0.4rem;
+}
+.row.highlight {
+  outline: 3px solid var(--ask);
 }
 .row {
   border: var(--line);
@@ -869,7 +907,7 @@ dialog.sheet::backdrop {
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  min-height: 36px;
+  min-height: 44px;
 }
 
 .qr {

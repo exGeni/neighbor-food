@@ -53,6 +53,9 @@ export function homeView(options: HomeOptions): () => void {
   const open = new Set<string>();
   const busy = new Map<string, Busy>();
   const drawnRows = new Set<string>();
+  let highlighted = '';
+  /** Neighbours' posts the server has shown before; a new one is said aloud. */
+  let known: Set<string> | null = null;
   /** Deletes in flight: the database already hides the post here, the row stays until it answers. */
   const deleting = new Map<string, Post>();
   /** When each unconfirmed post was first seen. */
@@ -134,7 +137,12 @@ export function homeView(options: HomeOptions): () => void {
 
   function openRow(id: string): void {
     open.add(id);
+    highlighted = id;
     render();
+    later(1600, () => {
+      highlighted = '';
+      render();
+    });
     const head = list.querySelector<HTMLElement>(`[data-focus="head:${CSS.escape(id)}"]`);
     head?.scrollIntoView({ block: 'center', behavior: 'smooth' });
     head?.focus({ preventScroll: true });
@@ -257,18 +265,22 @@ export function homeView(options: HomeOptions): () => void {
       lines.push(h('p', { class: 'banner', role: 'status' }, stuck(post) ? t('notConfirmed') : t('checking')));
     }
 
+    const contactButton = () =>
+      button(t('contact'), () => contactSheet(entrance.contact), { class: 'button button-link', 'data-focus': `contact:${post.id}` });
+    const sendButton = (primary = false) =>
+      control(t('send'), () => sendSheet(shareText(post, clock(), lang()), demo ? demoUrl() : postUrl(key, post.id)), 'send', primary, false);
     const actions = h('div', { class: 'actions' });
     if (own) {
       if (post.kind === 'offer') {
         actions.append(
-          control(t('send'), () => sendSheet(shareText(post, clock(), lang()), demo ? demoUrl() : postUrl(key, post.id)), 'send', true, false),
+          sendButton(true),
           calendarButton(),
         );
       }
       actions.append(control(t('delete'), () => remove(post), 'delete'));
     } else if (reply) {
-      if (post.kind === 'offer') actions.append(calendarButton());
-      actions.append(control(t('cancel'), () => cancel(post), 'cancel'));
+      if (post.kind === 'offer') actions.append(calendarButton(), sendButton());
+      actions.append(control(t('cancel'), () => cancel(post), 'cancel'), contactButton());
     } else {
       const reason = closedReason(post);
       if (reason) {
@@ -277,6 +289,7 @@ export function homeView(options: HomeOptions): () => void {
         const label = post.kind === 'ask' ? t('iCan') : post.portions === undefined ? t('imComing') : t('take');
         actions.append(control(label, () => claim(post), 'take', true));
       }
+      if (post.kind === 'offer') actions.append(sendButton());
       actions.append(
         button(
           t('hide'),
@@ -287,7 +300,7 @@ export function homeView(options: HomeOptions): () => void {
           },
           { class: 'button button-link', 'data-focus': `hide:${post.id}` },
         ),
-        button(t('contact'), () => contactSheet(entrance.contact), { class: 'button button-link', 'data-focus': `contact:${post.id}` }),
+        contactButton(),
       );
     }
     body.append(...lines.filter((line): line is Node => line instanceof Node), actions);
@@ -314,7 +327,7 @@ export function homeView(options: HomeOptions): () => void {
     const tag = stuck(post) ? t('notConfirmed') : waiting ? t('checking') : unseen > 0 ? plural('newTakers', unseen) : mineAt ? `${t('yourPortion')} · ${mineAt}` : '';
     return h(
       'li',
-      { class: `row${fresh ? ' fresh' : ''}`, 'data-kind': post.kind, 'data-full': post.left === 0, 'data-id': post.id },
+      { class: `row${fresh ? ' fresh' : ''}${highlighted === post.id ? ' highlight' : ''}`, 'data-kind': post.kind, 'data-full': post.left === 0, 'data-id': post.id },
       h(
         'button',
         {
@@ -425,6 +438,11 @@ export function homeView(options: HomeOptions): () => void {
     for (const lost of news.lost) toast(t(lost.reason === 'ended' ? 'claimEnded' : 'claimRemoved', { what: lost.what }), 12_000);
 
     session.setSeen(Object.fromEntries(posts.filter((post) => post.author === me).map((post) => [post.id, replyCount(post)])));
+
+    // New activity from neighbours is announced politely.
+    const others = posts.filter((post) => post.author !== me && post.expiresAt > now);
+    if (known) for (const post of others) if (!known.has(post.id)) toast(t('newPost', { what: post.what }));
+    known = new Set([...(known ?? []), ...others.map((post) => post.id)]);
 
     if (linked) {
       const id = linked;

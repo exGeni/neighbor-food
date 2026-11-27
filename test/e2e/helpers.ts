@@ -16,14 +16,17 @@ export async function setOwnerCode(): Promise<void> {
 export interface Watched {
   requests: string[];
   problems: string[];
+  /** Everything written to the console. */
+  console: string[];
 }
 
 /** Records every request, page error and security-policy violation. */
 export async function watch(page: Page): Promise<Watched> {
-  const seen: Watched = { requests: [], problems: [] };
+  const seen: Watched = { requests: [], problems: [], console: [] };
   page.on('request', (request) => seen.requests.push(request.url()));
   page.on('pageerror', (error) => seen.problems.push(String(error)));
   page.on('console', (message) => {
+    seen.console.push(message.text());
     if (message.type() === 'error' || /content security policy/i.test(message.text())) seen.problems.push(message.text());
   });
   await page.addInitScript(() => {
@@ -57,3 +60,18 @@ export async function enter(page: Page, key: string): Promise<void> {
 
 export const row = (page: Page, what: string) => page.locator('.row', { hasText: what });
 export const openRow = (page: Page, what: string) => row(page, what).locator('.row-head').click();
+
+/** What the organiser could do in the console of the real project. */
+export async function admin(path: string, fields: Record<string, object>, mask = false): Promise<void> {
+  const query = mask ? `?${Object.keys(fields).map((name) => `updateMask.fieldPaths=${name}`).join('&')}` : '';
+  const response = await fetch(`${DOCUMENTS}/${path}${query}`, {
+    method: 'PATCH',
+    headers: { Authorization: 'Bearer owner', 'Content-Type': 'application/json' },
+    body: JSON.stringify({ fields }),
+  });
+  expect(response.ok).toBe(true);
+}
+
+export async function exists(path: string): Promise<boolean> {
+  return (await fetch(`${DOCUMENTS}/${path}`, { headers: { Authorization: 'Bearer owner' } })).ok;
+}

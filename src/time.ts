@@ -33,6 +33,20 @@ export function offerAt(now: number, daysAhead: number, clockTime: string): numb
   return day.getTime();
 }
 
+/** What the form proposes: two hours ahead on the hour, which late in the evening is tomorrow. */
+export function defaultWhen(now: number): { day: 'today' | 'tomorrow'; time: string } {
+  const soon = new Date(now + 2 * HOUR);
+  const day = soon.getDate() === new Date(now).getDate() ? 'today' : 'tomorrow';
+  return { day, time: `${String(soon.getHours()).padStart(2, '0')}:00` };
+}
+
+/** Days from today to a date field's "YYYY-MM-DD"; -1 when it cannot be read. */
+export function daysFrom(now: number, date: string): number {
+  const [year, month, day] = date.split('-').map(Number);
+  if (!year || !month || !day) return -1;
+  return daysBetween(now, new Date(year, month - 1, day).getTime());
+}
+
 /** Whole local days between two moments (0 = same day, 1 = next day). */
 export function daysBetween(from: number, to: number): number {
   const a = new Date(from);

@@ -3,7 +3,8 @@ import { logProblem, StoreError } from '../errors';
 import { t } from '../i18n';
 import { clean, LIMITS, randomId } from '../limits';
 import type { Kind, NewPost, Store } from '../store/types';
-import { askExpiry, HOUR, offerAt, offerExpiry, type AskUntil, type Clock } from '../time';
+import { readJson, remove, writeJson } from '../storage';
+import { askExpiry, daysFrom, defaultWhen, HOUR, offerAt, offerExpiry, type AskUntil, type Clock } from '../time';
 import { button, h, uid } from '../ui/dom';
 import { openSheet } from '../ui/sheet';
 import { checkPost, type PostErrors } from '../validate';
@@ -11,6 +12,12 @@ import { errorBox, foodLine } from './common';
 import { field, fieldErrorText, type Field } from './sheets';
 
 export const CONFIRM_WAIT = 10_000;
+
+/** Publishes once: before a retry the id is looked up, because only the answer may have been lost. */
+export async function publishOnce(store: Store, entranceKey: string, post: NewPost, retry: boolean): Promise<void> {
+  if (retry && (await store.getPost(entranceKey, post.id)) !== null) return;
+  await store.createPost(entranceKey, post);
+}
 
 export interface FormContext {
   store: Store;
@@ -55,13 +62,9 @@ export function postForm(context: FormContext): void {
   let attempted = false;
   let sending = false;
   let kind: Kind = 'offer';
-  let day: 'today' | 'tomorrow' | 'other' = 'today';
+  const proposed = defaultWhen(clock());
+  let day: 'today' | 'tomorrow' | 'other' = proposed.day;
   let until: AskUntil = 'today';
-
-  const soon = new Date(clock() + 2 * HOUR);
-  const defaultTime = `${pad(soon.getHours())}:00`;
-  // Late in the evening two hours ahead is already tomorrow.
-  if (soon.getDate() !== new Date(clock()).getDate()) day = 'tomorrow';
 
   openSheet(t('newTitle'), (close) => {
     const what = h('input', { type: 'text', autocomplete: 'off', placeholder: t('whatOfferHint') });
@@ -69,7 +72,7 @@ export function postForm(context: FormContext): void {
     const allergens = h('input', { type: 'text', autocomplete: 'off' });
     const name = h('input', { type: 'text', autocomplete: 'given-name', value: context.name });
     const date = h('input', { type: 'date', min: dayValue(clock()), max: dayValue(clock() + LIMITS.offerDaysAhead * 24 * HOUR), value: dayValue(clock() + 48 * HOUR) });
-    const time = h('input', { type: 'time', value: defaultTime });
+    const time = h('input', { type: 'time', value: proposed.time });
     const portions = h('input', { type: 'number', inputmode: 'numeric', min: LIMITS.portionsMin, max: LIMITS.portionsMax, value: 3 });
     const noLimit = h('input', { type: 'checkbox' });
 
@@ -147,13 +150,7 @@ export function postForm(context: FormContext): void {
       submit.textContent = offer ? t('publish') : t('publishAsk');
     };
 
-    const daysAhead = (): number => {
-      if (day !== 'other') return day === 'today' ? 0 : 1;
-      const [year, month, dayOfMonth] = date.value.split('-').map(Number);
-      if (!year || !month || !dayOfMonth) return -1;
-      const now = new Date(clock());
-      return Math.round((Date.UTC(year, month - 1, dayOfMonth) - Date.UTC(now.getFullYear(), now.getMonth(), now.getDate())) / (24 * HOUR));
-    };
+    const daysAhead = (): number => (day === 'other' ? daysFrom(clock(), date.value) : day === 'today' ? 0 : 1);
 
     const read = (): { post: NewPost; errors: PostErrors } => {
       const offer = kind === 'offer';
@@ -207,11 +204,19 @@ export function postForm(context: FormContext): void {
       submit.textContent = t('publishing');
       status.replaceChildren();
       const slow = setTimeout(() => status.replaceChildren(h('p', { class: 'banner banner-warn' }, t('notConfirmed'))), CONFIRM_WAIT);
-      try {
-        // A first attempt may have reached the server even though no answer came back.
-        const exists = attempted && (await store.getPost(entranceKey, post.id)) !== null;
+      // The id of an unconfirmed post is kept on the phone, so a reload cannot publish it twice.
+      const keep = store.mode === 'live';
+      const kept = keep ? readJson<{ id: string; what: string } | null>(`pending-post:${entranceKey}`, null) : null;
+      if (kept?.what === post.what) {
+        post.id = kept.id;
         attempted = true;
-        if (!exists) await store.createPost(entranceKey, post);
+      }
+      if (keep) writeJson(`pending-post:${entranceKey}`, { id: post.id, what: post.what });
+      try {
+        const retry = attempted;
+        attempted = true;
+        await publishOnce(store, entranceKey, post, retry);
+        if (keep) remove(`pending-post:${entranceKey}`);
         const stillOpen = form.isConnected;
         if (stillOpen) close();
         context.published(post, post.name);

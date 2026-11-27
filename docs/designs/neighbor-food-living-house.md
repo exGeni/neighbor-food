@@ -164,12 +164,14 @@ test. Limits come from one table in code, which the rules tests use.
   "removed" are judged only on server snapshots. Animations play only for ids not seen before.
   A failed listener changes the screen state and is re-subscribed on retry.
 - The database uses the in-memory cache: a reload drops unsent writes.
-- Post ids are made by the client and kept until confirmed; before a retry the app reads that id.
+- Post ids are made by the client and kept on the phone until confirmed; before a retry the app
+  reads that id.
   A plain write (create, delete) with no answer after 10 s marks its row "not confirmed yet" and
   blocks only that action. Pending deletes are tracked in the app so the row can be marked.
 - Claim and cancel are transactions with typed outcomes: taken, already yours, full, gone,
-  expired, unknown. On denied or aborted: re-read from the server, classify, retry once with
-  jitter if a portion is free; an existing own entry counts as success. The row stays "checking"
+  expired, unknown. On denied or aborted: re-read from the server, classify, and while a portion
+  is free retry a few times with a growing random wait (the database refuses an outdated count when
+  many press at once); an existing own entry counts as success. The row stays "checking"
   until the transaction returns; after 10 s it offers "reload to check".
 - On opening an entrance, delete a few expired posts once per session after a server snapshot,
   ignoring refusals (logged with a code).
@@ -182,6 +184,17 @@ test. Limits come from one table in code, which the rules tests use.
   local "Hide". 4 windows per floor, at most 6 drawn floors.
 - Every browser storage key the app writes starts with `nf:` and is scoped by base path and
   entrance. Storage access is wrapped so private mode works.
+
+## Accessibility
+
+Text contrast 4.5:1 or better; visible focus; offer and take work with a keyboard and a screen
+reader and with motion switched off; every animated change also changes row text; new posts from
+neighbours and the outcome of an action are announced politely; the house is a labelled group whose
+lit windows are buttons (the rows say the same).
+
+Tapping a lit window opens, scrolls to and highlights its row. "Hide on this phone" is for posts
+you have not answered; "Contact the organiser" stays on a post you have. "Send to the building
+chat" is on every offer.
 
 ## Errors
 

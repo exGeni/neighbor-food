@@ -50,6 +50,9 @@ export interface Connection {
   quiet?: boolean;
 }
 
+/** Enough for a whole entrance pressing at the same moment. */
+const RETRIES = 8;
+
 const sdkCode = (error: unknown): string => String((error as { code?: unknown } | null)?.code ?? '');
 
 function authProblem(code: string): ScreenErrorCode {
@@ -191,7 +194,8 @@ export class FirestoreStore implements Store {
 
   /**
    * Runs a reply transaction. When the database refuses or gives up, the post is read again to
-   * say why; if nothing explains it, one more try after a short random wait.
+   * say why. If nothing explains it, someone else was faster with another portion: the database
+   * refuses the outdated count, so it is tried again after a growing random wait.
    */
   private async reply<T>(key: string, id: string, run: () => Promise<T>, explain: (post: Post | null) => T | undefined, lost: T): Promise<T> {
     for (let attempt = 0; ; attempt++) {
@@ -210,8 +214,8 @@ export class FirestoreStore implements Store {
         }
         const outcome = explain(post);
         if (outcome !== undefined) return outcome;
-        if (attempt > 0) throw this.problem(error);
-        await new Promise((resolve) => setTimeout(resolve, 200 + Math.random() * 600));
+        if (attempt >= RETRIES) throw this.problem(error);
+        await new Promise((resolve) => setTimeout(resolve, Math.random() * 300 * (attempt + 1)));
       }
     }
   }

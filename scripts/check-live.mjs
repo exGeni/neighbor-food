@@ -30,9 +30,15 @@ const report = (ok, what) => {
 };
 
 const browser = await chromium.launch();
+/** Database projects the site itself talked to. */
+const projects = new Set();
 const enter = async () => {
   const context = await browser.newContext({ ...devices['Pixel 7'], locale: 'en-GB' });
   const page = await context.newPage();
+  page.on('request', (request) => {
+    const match = decodeURIComponent(request.url()).match(/projects\/([a-z0-9-]+)(\/|%2F)/);
+    if (match) projects.add(match[1]);
+  });
   await page.goto(`${site}#/e/${key}`);
   await page.getByRole('button', { name: /^Enter/ }).click();
   await page.getByRole('button', { name: 'Treat or ask' }).waitFor();
@@ -73,8 +79,9 @@ try {
 
 const web = config();
 if (!web) {
-  console.log('skip  refusals: no FIREBASE_CONFIG here (environment or .env.local)');
+  report(false, 'refusals not checked: no FIREBASE_CONFIG here (environment or .env.local)');
 } else {
+  report(projects.size === 0 || (projects.size === 1 && projects.has(web.projectId)), `the site uses the project you configured (${web.projectId}; seen: ${[...projects].join(', ') || 'not visible'})`);
   const documents = `https://firestore.googleapis.com/v1/projects/${web.projectId}/databases/(default)/documents`;
   // The key is limited to the site's address, so the same address is sent along.
   const headers = { Referer: new URL(site).href };

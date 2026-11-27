@@ -109,8 +109,19 @@ Another address path? Set `BASE_PATH` (the workflow takes it from the repository
 - **A leaked link or QR:** create a new entrance, hang the new poster, close the old one.
 - **After a trial:** either keep it running, or close the entrance and clear its data.
 
-Updating your fork: if the [changelog](CHANGELOG.md) says the rules changed, publish the new rules
-before the new site goes live.
+- **Watch once** whether a neighbour finds an offer through the chat and finds the meeting place.
+
+### Updating your fork
+
+1. Read the [changelog](CHANGELOG.md): did the rules change?
+2. *Sync fork* on GitHub.
+3. If they did, publish the new `firestore.rules` **before** the new site goes live (cancel the run
+   the sync started, publish, then run the workflow again).
+4. Run `npm run check:live` as in step 13.
+
+To go back: *Actions →* the last good run *→ Re-run all jobs* brings back that site; if the rules
+changed too, publish the previous `firestore.rules` from that commit (the console also keeps the
+history of published rules).
 
 ## Troubleshooting
 
@@ -197,7 +208,8 @@ Home-made food is eaten at one's own risk; the page says so and asks to mention 
 Do not show a real entrance's QR or address in a video: anyone who sees it can enter. For shots of
 the poster use [`#/demo/poster`](https://exgeni.github.io/neighbor-food/#/demo/poster). For shots of
 people using it, create a second, disposable entrance with invented names and contact, film with
-the consent of those filmed, and close that entrance before publishing the video.
+the consent of those filmed, and close that entrance before publishing the video. In the video,
+point viewers to the demo.
 
 ## How it is built
 

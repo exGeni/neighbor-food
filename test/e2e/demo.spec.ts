@@ -73,3 +73,21 @@ test('says what is stored', async ({ page }) => {
   await expect(page.getByRole('heading', { name: 'What is stored' })).toBeVisible();
   await expect(page.getByText(/United States/)).toBeVisible();
 });
+
+test('markup typed into a field stays text', async ({ page }) => {
+  const seen = await watch(page);
+  await page.goto('');
+  const markup = '<img src=x onerror=alert(1)>';
+  await page.getByRole('button', { name: 'Treat or ask' }).click();
+  await page.getByLabel('What?').fill(markup);
+  await page.getByLabel('Where?').fill('<b>bold</b>');
+  await page.getByLabel(/Your name/).fill('<i>me</i>');
+  await page.locator('dialog label.choice', { hasText: 'Tomorrow' }).click();
+  await page.getByRole('button', { name: 'Light the window' }).click();
+  await expect(page.getByRole('heading', { name: 'Send it to the building chat' })).toBeVisible();
+  await page.getByRole('button', { name: 'Close' }).click();
+  await openRow(page, markup);
+  await expect(row(page, markup)).toContainText('<b>bold</b>');
+  await expect(page.locator('.list img, .list b, .list i')).toHaveCount(0);
+  expect(seen.problems).toEqual([]);
+});

@@ -1,7 +1,7 @@
 // The same suite as for the memory store, over the real client code and the emulators.
 import { deleteApp, getApps } from 'firebase/app';
 import { inMemoryPersistence } from 'firebase/auth';
-import { disableNetwork, enableNetwork } from 'firebase/firestore';
+import { disableNetwork, doc, enableNetwork, setDoc } from 'firebase/firestore';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { RulesTestEnvironment } from '@firebase/rules-unit-testing';
 import { randomId } from '../../src/limits';
@@ -65,5 +65,37 @@ describe('Firestore store', () => {
     const key = randomId();
     await author.createEntrance({ key, name: 'Hall', floors: 2, contact: 'Ann', code: OWNER_CODE });
     await expect(author.deletePost(key, 'never-was')).resolves.toBeUndefined();
+  });
+});
+
+describe('a crowded entrance', () => {
+  async function entrance(): Promise<{ author: FirestoreStore; key: string }> {
+    await env.clearFirestore();
+    await setOwnerCode(env, OWNER_CODE);
+    const author = await user();
+    const key = randomId();
+    await author.createEntrance({ key, name: 'Hall', floors: 2, contact: 'Ann', code: OWNER_CODE });
+    return { author, key };
+  }
+
+  it('gives three portions to exactly three of twenty at once', async () => {
+    const { author, key } = await entrance();
+    const post = newOffer({ portions: 3 });
+    await author.createPost(key, post);
+    const guests = await Promise.all(Array.from({ length: 20 }, () => user()));
+    const outcomes = await Promise.all(guests.map((guest) => guest.claim(key, post.id, { name: '' }).catch((error) => 'refused:' + error.sdkCode)));
+    expect(outcomes.filter((outcome) => outcome === 'taken')).toHaveLength(3);
+    expect(outcomes.filter((outcome) => outcome.startsWith('refused'))).toEqual([]);
+    const after = await author.getPost(key, post.id);
+    expect(after?.left).toBe(0);
+    expect(Object.keys(after?.responses ?? {})).toHaveLength(3);
+  }, 120_000);
+
+  it('reads a closed entrance as no entrance', async () => {
+    const { key } = await entrance();
+    await env.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore() as never, 'entrances', key), { closed: true }, { merge: true });
+    });
+    expect(await (await user()).getEntrance(key)).toBeNull();
   });
 });
