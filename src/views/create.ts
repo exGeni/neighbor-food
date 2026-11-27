@@ -80,7 +80,10 @@ export function createView(options: CreateOptions): () => void {
       if (!gone) toPoster(key);
     } catch (error) {
       logProblem('create-entrance', error);
-      fail(error instanceof StoreError ? error.code : 'NF-UNEXPECTED');
+      const code = error instanceof StoreError ? error.code : 'NF-UNEXPECTED';
+      // Refused means nothing was written under this key, and it may be the key that is the trouble.
+      if (code === 'NF-NEW-REFUSED') remove(PENDING);
+      fail(code);
     } finally {
       clearTimeout(slow);
     }

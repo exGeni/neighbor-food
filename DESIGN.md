@@ -29,7 +29,8 @@ Headings: Balsamiq Sans 700. Text: Rubik 400 and 600. Both OFL, served from the 
 | body, rows | 1rem (16px) |
 | second line of a row, notes | 0.875 to 0.9rem |
 
-Touch targets are 44px or more. Text contrast is 4.5:1 or better.
+Touch targets are 44px or more. Text contrast is 4.5:1 or better. The food line is marked by a
+lit-yellow rule on its left.
 
 ## Layout
 

@@ -16,7 +16,7 @@ export class ConfigError extends Error {
 export function checkConfig(raw: string | undefined): string | null {
   if (!raw?.trim()) return null;
   if (/PRIVATE KEY|"service_account"/.test(raw)) {
-    throw new ConfigError('NF-BUILD-CONFIG-SECRET', 'this is a server key. Never publish it; delete it in the console and use the web app config.');
+    throw new ConfigError('NF-BUILD-CONFIG-SECRET', 'this is a server key. The build log may already show it: revoke it in the console, delete this run on GitHub, and use the web app config.');
   }
   let value: unknown;
   try {
@@ -28,7 +28,7 @@ export function checkConfig(raw: string | undefined): string | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new ConfigError('NF-BUILD-CONFIG-JSON', 'FIREBASE_CONFIG is not one JSON object.');
   const entries = Object.entries(value as Record<string, unknown>);
   if (entries.some(([name]) => SECRET_FIELDS.includes(name))) {
-    throw new ConfigError('NF-BUILD-CONFIG-SECRET', 'it has fields of a server credential. Use the web app config.');
+    throw new ConfigError('NF-BUILD-CONFIG-SECRET', 'it has fields of a server credential. The build log may already show it: revoke it, delete this run on GitHub, and use the web app config.');
   }
   const unknown = entries.filter(([name]) => !ALLOWED.includes(name)).length;
   if (unknown > 0) throw new ConfigError('NF-BUILD-CONFIG-FIELD', `${unknown} field(s) are not part of a web app config. Allowed: ${ALLOWED.join(', ')}.`);

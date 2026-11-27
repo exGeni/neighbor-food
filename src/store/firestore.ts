@@ -17,6 +17,7 @@ import {
   deleteField,
   doc,
   getDocFromServer,
+  getDocsFromServer,
   initializeFirestore,
   limit,
   memoryLocalCache,
@@ -28,6 +29,7 @@ import {
   setDoc,
   setLogLevel,
   Timestamp,
+  where,
   writeBatch,
   type DocumentData,
   type DocumentReference,
@@ -160,6 +162,20 @@ export class FirestoreStore implements Store {
   async getPost(key: string, id: string): Promise<Post | null> {
     try {
       return await this.read(key, id);
+    } catch (error) {
+      throw this.problem(error);
+    }
+  }
+
+  async expired(key: string, count: number): Promise<string[]> {
+    try {
+      const over = query(
+        collection(this.db, 'entrances', key, 'posts'),
+        where('expiresAt', '<=', Timestamp.fromMillis(this.clock())),
+        orderBy('expiresAt'),
+        limit(count),
+      );
+      return (await getDocsFromServer(over)).docs.map((item) => item.id);
     } catch (error) {
       throw this.problem(error);
     }

@@ -31,6 +31,17 @@ export function errorBox(code: ScreenErrorCode, ...actions: Child[]): HTMLElemen
   return h('div', { class: 'banner error', role: 'alert', 'data-code': code }, h('p', null, text), h('p', null, next), h('code', null, code), ...actions);
 }
 
+let toasts: HTMLElement | null = null;
+
+/** The announcements live outside the screens, so a redraw does not swallow them. */
+export function toastRegion(): HTMLElement {
+  if (!toasts) {
+    toasts = h('div', { class: 'toasts', role: 'status', 'aria-live': 'polite' });
+    document.body.append(toasts);
+  }
+  return toasts;
+}
+
 export const foodLine = (): HTMLElement => h('p', { class: 'food' }, t('foodLine'));
 
 export const retryButton = (retry: () => void): HTMLButtonElement => button(t('retry'), retry, { class: 'button button-small' });

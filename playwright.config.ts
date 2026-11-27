@@ -5,6 +5,7 @@ const PORT = 4174;
 
 export default defineConfig({
   testDir: 'test/e2e',
+  forbidOnly: !!process.env.CI,
   // One emulator database for all tests.
   workers: 1,
   timeout: 60_000,

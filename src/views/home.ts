@@ -5,12 +5,13 @@ import { dict, lang, plural, t } from '../i18n';
 import { closedReason, followClaims, group, replies, replyCount, shareText, summary, timeLabel } from '../model';
 import { demoUrl, postUrl } from '../router';
 import type { Session } from '../session';
+import { readJson, remove as removeStored } from '../storage';
 import type { Entrance, NewPost, Post, Store } from '../store/types';
 import { clockText, type Clock } from '../time';
 import { button, h, link, reducedMotion, type Child } from '../ui/dom';
 import { createHouse } from '../ui/house';
 import { leaveSheet, openSheet } from '../ui/sheet';
-import { errorBox, foodLine, langSwitch, retryButton } from './common';
+import { errorBox, foodLine, langSwitch, retryButton, toastRegion } from './common';
 import { CONFIRM_WAIT, postForm } from './form';
 import { contactSheet, deleteSheet, makeOwnSheet, sendSheet, takeSheet } from './sheets';
 
@@ -87,7 +88,9 @@ export function homeView(options: HomeOptions): () => void {
   const houseBox = h('div', { class: 'house-box house-loading' }, house.element);
   const banners = h('div', { class: 'stack' });
   const list = h('div', { class: 'list' });
-  const toasts = h('div', { class: 'toasts', role: 'status', 'aria-live': 'polite' });
+  // One region for the whole visit: a result that arrives after a redraw is still said.
+  const toasts = toastRegion();
+  let disposed = false;
   const main = button(t('mainButton'), () => newPost(), { class: 'button button-primary button-big' });
 
   const menu = () =>
@@ -126,16 +129,18 @@ export function homeView(options: HomeOptions): () => void {
       ),
       h('div', { class: 'action-bar' }, main),
     ),
-    toasts,
   );
 
   function toast(message: string, ms = 6000): void {
     const note = h('p', { class: 'toast' }, message);
     toasts.append(note);
-    later(ms, () => note.remove());
+    setTimeout(() => note.remove(), ms);
   }
 
   function openRow(id: string): void {
+    // Asked for by its window or a link: a hidden post comes back.
+    const hidden = session.hidden();
+    if (hidden.delete(id)) session.setHidden(hidden);
     open.add(id);
     highlighted = id;
     render();
@@ -144,7 +149,7 @@ export function homeView(options: HomeOptions): () => void {
       render();
     });
     const head = list.querySelector<HTMLElement>(`[data-focus="head:${CSS.escape(id)}"]`);
-    head?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    head?.scrollIntoView({ block: 'center', behavior: reducedMotion() ? 'auto' : 'smooth' });
     head?.focus({ preventScroll: true });
   }
 
@@ -154,8 +159,14 @@ export function homeView(options: HomeOptions): () => void {
       entranceKey: key,
       clock,
       name: session.name(),
+      failed(code) {
+        const { text, next } = dict().errors[code];
+        toast(`${text} ${next} (${code})`, 12_000);
+      },
       published(post: NewPost, name: string) {
         session.setName(name);
+        // The screen is gone (another page or language): no sheet over the new one.
+        if (disposed) return;
         // After the sheet has given focus back, so the page does not jump away from the house.
         later(0, () => window.scrollTo({ top: 0 }));
         if (post.kind !== 'offer') return;
@@ -453,10 +464,17 @@ export function homeView(options: HomeOptions): () => void {
 
     if (!demo && !cleaned.has(key)) {
       cleaned.add(key);
-      for (const post of posts.filter((p) => p.expiresAt <= now).slice(0, CLEAN_AT_ONCE)) {
-        store.deletePost(key, post.id).catch((error) => logProblem('clean-up', error));
-      }
+      // Asked for separately: the list on screen holds only the newest posts.
+      store
+        .expired(key, CLEAN_AT_ONCE)
+        .then((ids) => Promise.all(ids.map((id) => store.deletePost(key, id).catch((error) => logProblem('clean-up', error)))))
+        .catch((error) => logProblem('clean-up', error));
     }
+
+    // A post that is on the server needs no retry record any more.
+    const record = `pending-post:${key}`;
+    const kept = readJson<{ id: string } | null>(record, null);
+    if (kept && posts.some((post) => post.id === kept.id && !post.pending)) removeStored(record);
   }
 
   function watch(): void {
@@ -497,6 +515,7 @@ export function homeView(options: HomeOptions): () => void {
   watch();
 
   return () => {
+    disposed = true;
     stopWatch();
     clearInterval(minute);
     timers.forEach(clearTimeout);

@@ -75,6 +75,8 @@ export interface Store {
   createEntrance(entrance: NewEntrance): Promise<void>;
   watchPosts(key: string, onPosts: (snapshot: PostsSnapshot) => void, onError: (error: unknown) => void): () => void;
   getPost(key: string, id: string): Promise<Post | null>;
+  /** Ids of posts that are over, oldest first, whatever their place in the list. */
+  expired(key: string, count: number): Promise<string[]>;
   createPost(key: string, post: NewPost): Promise<void>;
   deletePost(key: string, id: string): Promise<void>;
   claim(key: string, id: string, reply: { name: string; note?: string }): Promise<ClaimOutcome>;

@@ -68,8 +68,9 @@ posts, and you are the one responsible for them.
    ```
 8. In the fork: *Settings → Secrets and variables → Actions → **Variables** tab → New repository
    variable*: name `FIREBASE_CONFIG`, value the JSON from step 7.
-9. *Actions → Test and publish → Run workflow* (branch `main`). The build log must say
-   `database: configured (<your project>)`, not `database: none, demo only`.
+9. *Actions → Test and publish → Run workflow* (branch `main`). Open the log of the **build** job:
+   it must say `database: configured (<your project>)`. (The `test` job always says
+   `database: none`; that is expected.)
 10. In the console, *Firestore Database → Rules*: replace everything with the contents of
     [`firestore.rules`](firestore.rules) and press **Publish**. (With the Firebase CLI:
     `npx firebase deploy --only firestore:rules --project <your project>`.)
@@ -80,8 +81,9 @@ posts, and you are the one responsible for them.
 12. Open `https://<your name>.github.io/neighbor-food/#/new`, type the organiser code, the entrance
     name, the number of floors and how neighbours can reach you. You get the poster.
 13. **Check that it works:** scan the poster with a phone, enter, post something; take it with a
-    second phone. Or from your computer (put the config into `.env.local` as
-    `VITE_FIREBASE_CONFIG='{…}'`):
+    second phone. Or from your computer: install [Node](https://nodejs.org), clone your fork, run
+    `npm ci` and `npx playwright install chromium`, put the config into `.env.local` as
+    `VITE_FIREBASE_CONFIG='{…}'`, then:
     ```sh
     npm run check:live -- https://<your name>.github.io/neighbor-food/ <entrance key>
     ```
@@ -106,7 +108,8 @@ Another address path? Set `BASE_PATH` (the workflow takes it from the repository
 - **Close an entrance:** set `closed` (type boolean) to `true`. The link then shows "does not work
   any more". To remove the data, delete the document with its subcollections.
 - **Anonymous accounts** pile up under *Authentication → Users*; delete them there.
-- **A leaked link or QR:** create a new entrance, hang the new poster, close the old one.
+- **A leaked link or QR:** create a new entrance, hang the new poster, close the old one. A page
+  already open somewhere may keep showing posts until it is reloaded; delete the old posts too.
 - **After a trial:** either keep it running, or close the entrance and clear its data.
 
 - **Watch once** whether a neighbour finds an offer through the chat and finds the meeting place.
@@ -139,8 +142,9 @@ belong to it.
 
 ### NF-BUILD-CONFIG-SECRET
 
-The build stopped: this looks like a **server** key. It must never be published. Delete that key in
-the console and use the web app config of step 7.
+The build stopped: this looks like a **server** key. It must never be published. The run log may
+already show it, so: revoke (delete) that key in the console, delete the workflow run on GitHub,
+and put the web app config of step 7 into the variable.
 
 ### NF-AUTH-OFF
 

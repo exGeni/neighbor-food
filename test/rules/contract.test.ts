@@ -1,7 +1,7 @@
 // The same suite as for the memory store, over the real client code and the emulators.
 import { deleteApp, getApps } from 'firebase/app';
 import { inMemoryPersistence } from 'firebase/auth';
-import { disableNetwork, doc, enableNetwork, setDoc } from 'firebase/firestore';
+import { disableNetwork, doc, enableNetwork, setDoc, Timestamp } from 'firebase/firestore';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { RulesTestEnvironment } from '@firebase/rules-unit-testing';
 import { randomId } from '../../src/limits';
@@ -90,6 +90,15 @@ describe('a crowded entrance', () => {
     expect(after?.left).toBe(0);
     expect(Object.keys(after?.responses ?? {})).toHaveLength(3);
   }, 120_000);
+
+  it('finds posts that are over with its own query', async () => {
+    const { author, key } = await entrance();
+    await author.createPost(key, newOffer());
+    await env.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore() as never, 'entrances', key, 'posts', 'old'), { expiresAt: Timestamp.fromMillis(Date.now() - 1000), createdAt: Timestamp.now() });
+    });
+    expect(await author.expired(key, 5)).toEqual(['old']);
+  });
 
   it('reads a closed entrance as no entrance', async () => {
     const { key } = await entrance();

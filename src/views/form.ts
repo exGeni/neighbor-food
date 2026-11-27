@@ -1,7 +1,8 @@
 // "Treat or ask": one form for both. It closes only after the server has the post.
-import { logProblem, StoreError } from '../errors';
+import { logProblem, StoreError, type ScreenErrorCode } from '../errors';
 import { t } from '../i18n';
 import { clean, LIMITS, randomId } from '../limits';
+import { reusable, signature, type Pending } from '../pending';
 import type { Kind, NewPost, Store } from '../store/types';
 import { readJson, remove, writeJson } from '../storage';
 import { askExpiry, daysFrom, defaultWhen, HOUR, offerAt, offerExpiry, type AskUntil, type Clock } from '../time';
@@ -26,6 +27,8 @@ export interface FormContext {
   name: string;
   /** Called once the server has confirmed the post. */
   published(post: NewPost, name: string): void;
+  /** A publish that failed after its form was closed. */
+  failed(code: ScreenErrorCode): void;
 }
 
 function choices<T extends string>(legend: string, options: [T, string][], initial: T, changed: (value: T) => void): HTMLFieldSetElement {
@@ -57,9 +60,8 @@ const dayValue = (at: number): string => {
 
 export function postForm(context: FormContext): void {
   const { store, entranceKey, clock } = context;
-  // Kept across retries, so one post is never published twice.
-  const id = randomId();
-  let attempted = false;
+  /** The last attempt of this form: the same post sent again keeps its id. */
+  let last: Pending | null = null;
   let sending = false;
   let kind: Kind = 'offer';
   const proposed = defaultWhen(clock());
@@ -155,7 +157,7 @@ export function postForm(context: FormContext): void {
     const read = (): { post: NewPost; errors: PostErrors } => {
       const offer = kind === 'offer';
       const base = {
-        id,
+        id: randomId(),
         kind,
         what: clean(what.value),
         where: clean(where.value),
@@ -206,23 +208,23 @@ export function postForm(context: FormContext): void {
       const slow = setTimeout(() => status.replaceChildren(h('p', { class: 'banner banner-warn' }, t('notConfirmed'))), CONFIRM_WAIT);
       // The id of an unconfirmed post is kept on the phone, so a reload cannot publish it twice.
       const keep = store.mode === 'live';
-      const kept = keep ? readJson<{ id: string; what: string } | null>(`pending-post:${entranceKey}`, null) : null;
-      if (kept?.what === post.what) {
-        post.id = kept.id;
-        attempted = true;
-      }
-      if (keep) writeJson(`pending-post:${entranceKey}`, { id: post.id, what: post.what });
+      const record = `pending-post:${entranceKey}`;
+      const kept = last ?? (keep ? readJson<Pending | null>(record, null) : null);
+      const retry = reusable(kept, post, Date.now());
+      if (retry) post.id = kept.id;
+      last = retry ? kept : { id: post.id, sig: signature(post), since: Date.now() };
+      if (keep) writeJson(record, last);
       try {
-        const retry = attempted;
-        attempted = true;
         await publishOnce(store, entranceKey, post, retry);
-        if (keep) remove(`pending-post:${entranceKey}`);
+        if (keep) remove(record);
         const stillOpen = form.isConnected;
         if (stillOpen) close();
         context.published(post, post.name);
       } catch (error) {
         logProblem('publish', error);
         const code = error instanceof StoreError ? error.code : 'NF-UNEXPECTED';
+        // A closed form cannot show it: the screen behind it does.
+        if (!form.isConnected) context.failed(code);
         status.replaceChildren(errorBox(code, code === 'NF-ENTRY-DENIED' ? h('p', null, t('checkClock')) : null));
         submit.disabled = false;
         submit.textContent = kind === 'offer' ? t('publish') : t('publishAsk');

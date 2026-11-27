@@ -1,7 +1,9 @@
 // Behaviour a neighbour or the organiser can hit: retries, wording, what is hidden or reported.
+import { readFileSync } from 'node:fs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { logProblem, StoreError } from '../src/errors';
 import { followClaims, group, timeLabel } from '../src/model';
+import { reusable, signature } from '../src/pending';
 import { share } from '../src/share';
 import { MemoryStore, memoryData } from '../src/store/memory';
 import type { Post, Store } from '../src/store/types';
@@ -55,6 +57,40 @@ describe('publishing again after a lost answer', () => {
     const { data, author } = await house();
     await publishOnce(author, KEY, newOffer(), true);
     expect(data.posts.get(KEY)?.size).toBe(1);
+  });
+});
+
+describe('an unanswered post remembered on the phone', () => {
+  const offer = newOffer({ portions: 3 });
+  const kept = { id: offer.id, sig: signature(offer), since: 1000 };
+  it('is the same post only while nothing changed and it is recent', () => {
+    expect(reusable(kept, { ...offer, id: 'new' }, 2000)).toBe(true);
+    expect(reusable(kept, { ...offer, portions: 4 }, 2000)).toBe(false);
+    expect(reusable(kept, { ...offer, at: (offer.at as number) + HOUR }, 2000)).toBe(false);
+    expect(reusable(kept, offer, 1000 + HOUR)).toBe(false);
+    expect(reusable(null, offer, 2000)).toBe(false);
+  });
+});
+
+describe('clearing out', () => {
+  it('finds posts that are over, oldest first, whatever their age in the list', async () => {
+    let now = Date.now();
+    const { author } = await house(() => now);
+    const first = newOffer();
+    const second = newOffer({ at: now + 2 * HOUR, expiresAt: now + 5 * HOUR });
+    await author.createPost(KEY, second);
+    await author.createPost(KEY, first);
+    expect(await author.expired(KEY, 5)).toEqual([]);
+    now += 6 * HOUR;
+    expect(await author.expired(KEY, 5)).toEqual([first.id, second.id]);
+    expect(await author.expired(KEY, 1)).toEqual([first.id]);
+  });
+});
+
+describe('the page and a restricted browser key', () => {
+  it('sends the site origin to the database, and nothing more', () => {
+    const page = readFileSync('src/index.html', 'utf8');
+    expect(page).toContain('<meta name="referrer" content="strict-origin-when-cross-origin" />');
   });
 });
 

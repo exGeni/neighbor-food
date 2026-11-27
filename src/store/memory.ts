@@ -146,6 +146,15 @@ export class MemoryStore implements Store {
     return post ? copy(post) : null;
   }
 
+  async expired(key: string, count: number): Promise<string[]> {
+    await this.net.wait();
+    return [...this.open(key).values()]
+      .filter((post) => post.expiresAt <= this.clock())
+      .sort((a, b) => a.expiresAt - b.expiresAt)
+      .slice(0, count)
+      .map((post) => post.id);
+  }
+
   private build(input: NewPost, now: number): Post {
     const { at, portions, ...rest } = input;
     return {

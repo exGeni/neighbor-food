@@ -28,6 +28,8 @@ function remove(): void {
 }
 
 if (typeof window !== 'undefined') {
+  // A reload with a sheet open leaves its history step: give it back, or Back would do nothing.
+  if (history.state?.sheet) history.back();
   window.addEventListener('popstate', () => {
     if (goingBack) {
       goingBack = false;

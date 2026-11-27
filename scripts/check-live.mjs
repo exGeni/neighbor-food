@@ -81,18 +81,42 @@ const web = config();
 if (!web) {
   report(false, 'refusals not checked: no FIREBASE_CONFIG here (environment or .env.local)');
 } else {
-  report(projects.size === 0 || (projects.size === 1 && projects.has(web.projectId)), `the site uses the project you configured (${web.projectId}; seen: ${[...projects].join(', ') || 'not visible'})`);
+  report(projects.size === 1 && projects.has(web.projectId), `the site uses the project you configured (${web.projectId}; seen: ${[...projects].join(', ') || 'not visible'})`);
   const documents = `https://firestore.googleapis.com/v1/projects/${web.projectId}/databases/(default)/documents`;
   // The key is limited to the site's address, so the same address is sent along.
   const headers = { Referer: new URL(site).href };
-  const refused = async (what, path) => {
-    const response = await fetch(`${documents}/${path}${path.includes('?') ? '&' : '?'}key=${web.apiKey}`, { headers });
-    report(response.status === 401 || response.status === 403, `refused without sign-in: ${what} (${response.status})`);
+  const ask = (path, options = {}) =>
+    fetch(`${documents}/${path}${path.includes('?') ? '&' : '?'}key=${web.apiKey}`, { ...options, headers: { ...headers, ...options.headers } });
+  const refused = async (what, path, who, options) => {
+    const response = await ask(path, options);
+    report(response.status === 401 || response.status === 403, `refused ${who}: ${what} (${response.status})`);
   };
-  await refused('the organiser code', 'config/owner');
-  await refused('the list of entrances', 'entrances');
-  await refused('the posts of the entrance', `entrances/${key}/posts?pageSize=1`);
-  await refused('the create record', `entrances/${key}/private/create`);
+  const secrets = [
+    ['the organiser code', 'config/owner'],
+    ['the list of entrances', 'entrances'],
+    ['the create record', `entrances/${key}/private/create`],
+  ];
+  for (const [what, path] of secrets) await refused(what, path, 'without sign-in');
+  await refused('the posts of the entrance', `entrances/${key}/posts?pageSize=1`, 'without sign-in');
+
+  // The same questions from someone who did sign in: rules that only ask for that would pass above.
+  const signUp = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=${web.apiKey}`, {
+    method: 'POST',
+    headers: { ...headers, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ returnSecureToken: true }),
+  });
+  const { idToken } = await signUp.json();
+  if (!idToken) {
+    report(false, `could not sign in to ask as a neighbour (${signUp.status})`);
+  } else {
+    const signedIn = { headers: { Authorization: `Bearer ${idToken}` } };
+    for (const [what, path] of secrets) await refused(what, path, 'to a signed-in stranger', signedIn);
+    await refused('creating an entrance without the code', `entrances?documentId=refused-check-${Date.now()}`, 'to a signed-in stranger', {
+      method: 'POST',
+      headers: { ...signedIn.headers, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ fields: { name: { stringValue: 'check' } } }),
+    });
+  }
 }
 
 process.exit(failed ? 1 : 0);

@@ -1009,7 +1009,8 @@ footer.version {
   body {
     background: #fff;
   }
-  .no-print {
+  .no-print,
+  .toasts {
     display: none !important;
   }
   .poster {
