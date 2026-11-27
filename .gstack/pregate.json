@@ -1,0 +1,26 @@
+{
+  "strays": {
+    "allow": [
+      "firebase.json",
+      "firestore.rules",
+      ".github/**",
+      ".gstack/**",
+      "config/**",
+      "docs/**",
+      "public/**",
+      "scripts/**",
+      "src/**",
+      "test/**"
+    ]
+  },
+  "dependencies": {
+    "test/rules/**": [],
+    "test/e2e/**": []
+  },
+  "warn": [
+    "lanes"
+  ],
+  "local": [
+    "pages.yml/test"
+  ]
+}
