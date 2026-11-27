@@ -1,0 +1,91 @@
+// A check of the published site against its real database, after the rules were pasted:
+//   npm run check:live -- https://<you>.github.io/neighbor-food/ <entrance key>
+// Two invisible browsers enter the entrance, one posts a test offer, the other takes it, and the
+// test offer is deleted. Then it asks the database for things it must refuse.
+// Use it on a test entrance, or before the poster is on the wall.
+import { readFileSync, existsSync } from 'node:fs';
+import { join } from 'node:path';
+import { emulatorEnv, root } from './env.mjs';
+
+Object.assign(process.env, emulatorEnv());
+const { chromium, devices } = await import('@playwright/test');
+
+const [site, key] = process.argv.slice(2);
+if (!site || !key) {
+  console.error('usage: npm run check:live -- <site address ending in /> <entrance key>');
+  process.exit(2);
+}
+
+function config() {
+  const file = join(root, '.env.local');
+  const line = existsSync(file) ? readFileSync(file, 'utf8').split(/\r?\n/).find((l) => l.startsWith('VITE_FIREBASE_CONFIG=')) : undefined;
+  const raw = process.env.FIREBASE_CONFIG ?? line?.slice('VITE_FIREBASE_CONFIG='.length).replace(/^'|'$/g, '');
+  return raw ? JSON.parse(raw) : null;
+}
+
+let failed = false;
+const report = (ok, what) => {
+  failed ||= !ok;
+  console.log(`${ok ? 'ok  ' : 'FAIL'}  ${what}`);
+};
+
+const browser = await chromium.launch();
+const enter = async () => {
+  const context = await browser.newContext({ ...devices['Pixel 7'], locale: 'en-GB' });
+  const page = await context.newPage();
+  await page.goto(`${site}#/e/${key}`);
+  await page.getByRole('button', { name: /^Enter/ }).click();
+  await page.getByRole('button', { name: 'Treat or ask' }).waitFor();
+  return page;
+};
+
+try {
+  const author = await enter();
+  const guest = await enter();
+  report(true, 'two phones signed in and see the house');
+
+  const title = `Check ${Date.now().toString(36)}`;
+  await author.getByRole('button', { name: 'Treat or ask' }).click();
+  await author.getByLabel('What?').fill(title);
+  await author.locator('dialog label.choice', { hasText: 'Tomorrow' }).click();
+  await author.getByRole('button', { name: 'Light the window' }).click();
+  await author.getByRole('heading', { name: 'Send it to the building chat' }).waitFor();
+  await author.getByRole('button', { name: 'Close' }).click();
+  report(true, 'a test offer was published');
+
+  const row = (page) => page.locator('.row', { hasText: title });
+  await row(guest).locator('.row-head').click();
+  await row(guest).getByRole('button', { name: 'Take a portion' }).click();
+  await guest.getByRole('button', { name: 'Confirm' }).click();
+  await row(guest).getByText('Your portion', { exact: true }).waitFor();
+  report(true, 'the other phone took a portion');
+
+  await row(author).locator('.row-head').click();
+  await row(author).getByRole('button', { name: 'Delete' }).click();
+  await author.locator('dialog').getByRole('button', { name: 'Delete' }).click();
+  await row(guest).waitFor({ state: 'detached' });
+  report(true, 'the test offer was deleted');
+} catch (error) {
+  report(false, `the two-phone walk stopped: ${String(error.message).split('\n')[0]}`);
+} finally {
+  await browser.close();
+}
+
+const web = config();
+if (!web) {
+  console.log('skip  refusals: no FIREBASE_CONFIG here (environment or .env.local)');
+} else {
+  const documents = `https://firestore.googleapis.com/v1/projects/${web.projectId}/databases/(default)/documents`;
+  // The key is limited to the site's address, so the same address is sent along.
+  const headers = { Referer: new URL(site).href };
+  const refused = async (what, path) => {
+    const response = await fetch(`${documents}/${path}${path.includes('?') ? '&' : '?'}key=${web.apiKey}`, { headers });
+    report(response.status === 401 || response.status === 403, `refused without sign-in: ${what} (${response.status})`);
+  };
+  await refused('the organiser code', 'config/owner');
+  await refused('the list of entrances', 'entrances');
+  await refused('the posts of the entrance', `entrances/${key}/posts?pageSize=1`);
+  await refused('the create record', `entrances/${key}/private/create`);
+}
+
+process.exit(failed ? 1 : 0);

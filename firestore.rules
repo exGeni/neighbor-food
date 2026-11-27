@@ -1,0 +1,168 @@
+rules_version = '2';
+// These rules are the only protection of an entrance. The numbers repeat src/limits.ts; the rules
+// tests are generated from that table, so a difference fails the tests.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    // A single-line string within a length range.
+    function line(value, min, max) {
+      return value is string
+        && value.size() >= min
+        && value.size() <= max
+        && value.matches('[^\\n\\r\\x{2028}\\x{2029}]*');
+    }
+
+    // Written by the organiser in the console; a short code switches creating off.
+    function ownerCode() {
+      return get(/databases/$(database)/documents/config/owner).data.code;
+    }
+
+    function goodCode(code) {
+      return code is string && ownerCode() is string && ownerCode().size() >= 16 && code == ownerCode();
+    }
+
+    match /config/{document=**} {
+      allow read, write: if false;
+    }
+
+    match /entrances/{key} {
+      function member() {
+        return signedIn()
+          && get(/databases/$(database)/documents/entrances/$(key)).data.closed == false;
+      }
+
+      // By key only, never listed. A missing entrance reads as missing.
+      allow get: if resource == null || resource.data.closed == false;
+
+      allow create: if signedIn()
+        && key.matches('[A-Za-z0-9_-]{22,}')
+        && request.resource.data.keys().hasOnly(['name', 'floors', 'contact', 'closed', 'createdAt'])
+        && request.resource.data.keys().hasAll(['name', 'floors', 'contact', 'closed', 'createdAt'])
+        && line(request.resource.data.name, 1, 40)
+        && request.resource.data.name.trim().size() > 0
+        && request.resource.data.floors is int
+        && request.resource.data.floors >= 1
+        && request.resource.data.floors <= 30
+        && line(request.resource.data.contact, 1, 60)
+        && request.resource.data.contact.trim().size() > 0
+        && request.resource.data.closed == false
+        && request.resource.data.createdAt == request.time
+        && !exists(/databases/$(database)/documents/entrances/$(key)/private/create)
+        && goodCode(getAfter(/databases/$(database)/documents/entrances/$(key)/private/create).data.code);
+
+      // Written only together with its entrance, never read again.
+      match /private/{document} {
+        allow create: if signedIn()
+          && document == 'create'
+          && !exists(/databases/$(database)/documents/entrances/$(key))
+          && existsAfter(/databases/$(database)/documents/entrances/$(key))
+          && request.resource.data.keys().hasOnly(['code'])
+          && goodCode(request.resource.data.code);
+      }
+
+      match /posts/{post} {
+        function data() {
+          return request.resource.data;
+        }
+
+        function portionsAtStart() {
+          return (!('portions' in data()) && !('left' in data()))
+            || (data().portions is int
+              && data().portions >= 1
+              && data().portions <= 20
+              && data().left == data().portions);
+        }
+
+        function offerFields() {
+          return data().kind == 'offer'
+            && line(data().allergens, 0, 100)
+            && data().at is timestamp
+            && data().expiresAt == data().at + duration.value(3, 'h')
+            && portionsAtStart();
+        }
+
+        function askFields() {
+          return data().kind == 'ask'
+            && data().allergens == ''
+            && !('at' in data())
+            && !('portions' in data())
+            && !('left' in data());
+        }
+
+        function uid() {
+          return request.auth.uid;
+        }
+
+        function oneEntryChanged() {
+          return data().responses.diff(resource.data.responses).affectedKeys().hasOnly([uid()]);
+        }
+
+        function leftMoves(by) {
+          return ('left' in resource.data)
+            ? (data().left == resource.data.left + by && data().left >= 0)
+            : !('left' in data());
+        }
+
+        function goodReply(reply) {
+          return reply.keys().hasOnly(['name', 'at', 'note'])
+            && line(reply.name, 0, 30)
+            && reply.at == request.time
+            && (resource.data.kind == 'ask'
+              ? (line(reply.note, 1, 80) && reply.note.trim().size() > 0)
+              : !('note' in reply));
+        }
+
+        function claiming() {
+          return !(uid() in resource.data.responses)
+            && uid() in data().responses
+            && oneEntryChanged()
+            && data().responses.size() <= 30
+            && goodReply(data().responses[uid()])
+            && leftMoves(-1);
+        }
+
+        function cancelling() {
+          return uid() in resource.data.responses
+            && !(uid() in data().responses)
+            && oneEntryChanged()
+            && leftMoves(1);
+        }
+
+        allow get: if member();
+        allow list: if member() && request.query.limit <= 100;
+
+        allow create: if member()
+          && post.matches('[A-Za-z0-9_-]{1,64}')
+          && data().keys().hasOnly(['kind', 'what', 'where', 'name', 'allergens', 'author', 'createdAt', 'expiresAt', 'responses', 'at', 'portions', 'left'])
+          && data().keys().hasAll(['kind', 'what', 'where', 'name', 'allergens', 'author', 'createdAt', 'expiresAt', 'responses'])
+          && data().author == uid()
+          && data().createdAt == request.time
+          && data().expiresAt is timestamp
+          && data().expiresAt > request.time
+          && data().expiresAt <= request.time + duration.value(9, 'd')
+          && data().responses is map
+          && data().responses.size() == 0
+          && line(data().what, 1, 60)
+          && data().what.trim().size() > 0
+          && line(data()['where'], 0, 60)
+          && line(data().name, 0, 30)
+          && (offerFields() || askFields());
+
+        // Posts are never edited: only a neighbour's own reply and the count of portions move.
+        allow update: if member()
+          && resource.data.author != uid()
+          && resource.data.expiresAt > request.time
+          && data().diff(resource.data).affectedKeys().hasOnly(['responses', 'left'])
+          && data().responses is map
+          && (claiming() || cancelling());
+
+        allow delete: if member()
+          && (resource.data.author == uid() || resource.data.expiresAt <= request.time);
+      }
+    }
+  }
+}
