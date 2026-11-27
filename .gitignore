@@ -1,0 +1,14 @@
+node_modules/
+dist
+dist-e2e/
+*.log
+.env.local
+.env.*.local
+test-results/
+playwright-report/
+.firebase/
+firebase-debug.log
+firestore-debug.log
+ui-debug.log
+.gstack/*
+!.gstack/pregate.json
