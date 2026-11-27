@@ -1,5 +1,19 @@
 # TODOS
 
+## Real entrance
+
+### Turn the first real entrance on and try it with phones
+
+**What:** Create the Firebase project and the first entrance (README, "Host your own entrance", from step 3), then run `npm run check:live`, try it with two real phones from the printed poster and from a chat link, and check the calendar alarm on an iPhone and an Android.
+
+**Why:** Only the demonstration has been tried. Sign-in, the real database, the restricted browser key, real phones and print are unverified.
+
+**Context:** The site is already published from this repository, so steps 1 and 2 are done. Version 0.1.0 was checked on the emulators and, for the demonstration, on the live site in a phone-sized Chromium. Fix the README wherever a step turns out to be unclear: nobody has followed it yet.
+
+**Effort:** S
+**Priority:** P2
+**Depends on:** The maintainer's Firebase project
+
 ## Product
 
 ### Push notifications for new food
