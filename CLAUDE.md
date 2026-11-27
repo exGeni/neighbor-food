@@ -32,3 +32,13 @@ Node.js and blocks when it cannot run. If a skill is blocked with "node: not
 found", tell the user to install Node.js (https://nodejs.org); if it is blocked
 with "Cannot find module ... check-gstack.cjs", the hook file is missing from
 this checkout. Do not work around either block.
+
+## Testing
+
+Run all four before a pull request (the last two start the local Firebase emulators and need
+Java 21 or newer):
+
+- `npm test` — logic, translations, build config check
+- `npm run build` — type check, build, size budget of the demo
+- `npm run test:rules` — database rules and the database client
+- `npm run test:e2e` — two phones in a real browser (`npx playwright install chromium` once)
